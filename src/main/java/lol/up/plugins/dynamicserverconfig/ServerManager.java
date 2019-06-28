@@ -7,8 +7,8 @@ import net.md_5.bungee.api.ChatColor;
 import net.md_5.bungee.api.chat.TextComponent;
 import net.md_5.bungee.api.config.ServerInfo;
 import net.md_5.bungee.api.connection.ProxiedPlayer;
+import net.md_5.bungee.api.event.ServerConnectEvent;
 import net.md_5.bungee.api.plugin.Listener;
-import net.md_5.bungee.api.plugin.Plugin;
 import net.md_5.bungee.event.EventHandler;
 
 import javax.annotation.Nonnull;
@@ -16,9 +16,9 @@ import java.util.*;
 
 public class ServerManager implements Listener {
     private HashMap<String, ManagedServerInfo> managedServers = new HashMap<>();
-    private Plugin plugin;
+    private BungeePlugin plugin;
 
-    public ServerManager(Plugin plugin) {
+    ServerManager(BungeePlugin plugin) {
         this.plugin = plugin;
     }
 
@@ -92,6 +92,7 @@ public class ServerManager implements Listener {
 
         plugin.getProxy().getServers().put(managedServerInfo.serverName, serverInfo);
         managedServers.put(managedServerInfo.serverName, managedServerInfo);
+        logInfo(String.format("Added server %s", managedServerInfo.serverName));
         return serverInfo;
     }
 
@@ -107,17 +108,42 @@ public class ServerManager implements Listener {
             throw new ServerNotFound(serverName);
         }
 
-        this.plugin.getLogger().warning(String.format("Removing server %s - disconnecting %d players", serverName, serverInfo.getPlayers().size()));
+        this.plugin.getLogger().warning(String.format("Removing server %s - redirecting %d players", serverName, serverInfo.getPlayers().size()));
+        ServerInfo defaultServer = this.plugin.getDefaultServer();
+
         TextComponent disconnectReason = new TextComponent();
         disconnectReason.setText(String.format("The server %s is going down for maintenance. Please reconnect.", serverName));
         disconnectReason.setColor(ChatColor.RED);
 
-        for (ProxiedPlayer player : serverInfo.getPlayers()) {
-            player.disconnect(disconnectReason);
+        TextComponent redirectReason = new TextComponent();
+        if (defaultServer != null) {
+            redirectReason.setText(String.format("The server %s is going down. Redirecting you to %s", serverName, defaultServer.getName()));
+            redirectReason.setColor(ChatColor.DARK_PURPLE);
+            redirectReason.setBold(true);
         }
+
+        for (ProxiedPlayer player : serverInfo.getPlayers()) {
+            if (defaultServer == null) {
+                player.disconnect(disconnectReason);
+            } else {
+                player.sendMessage(redirectReason);
+                player.connect(defaultServer, (success, cause) -> {
+                    if (!success) {
+                        player.disconnect(disconnectReason);
+                    }
+                }, ServerConnectEvent.Reason.SERVER_DOWN_REDIRECT);
+            }
+
+        }
+
+        logInfo(String.format("Removed server %s", serverName));
 
         plugin.getProxy().getServers().remove(serverName);
         return serverInfo;
+    }
+
+    private void logInfo(String info) {
+        this.plugin.getLogger().info(info);
     }
 
     synchronized void removeAllServers() {

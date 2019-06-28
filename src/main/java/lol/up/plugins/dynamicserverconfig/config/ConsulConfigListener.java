@@ -26,8 +26,9 @@ public class ConsulConfigListener implements ConfigListener {
             throw new Exception("Already listening!");
         }
 
-        // TODO: Config
-        kvCache = KVCache.newCache(kvClient, "servers");
+        final String root = "servers";
+        plugin.getLogger().info("Started listening to consul.");
+        kvCache = KVCache.newCache(kvClient, root);
         kvCache.addListener(newValues -> {
             Gson gson = new Gson();
             List<ManagedServerInfo> newManagedServers = new ArrayList<>();
@@ -38,15 +39,18 @@ public class ConsulConfigListener implements ConfigListener {
                     continue;
                 }
                 SerializedServerInfo serializedServerInfo = gson.fromJson(valueAsString.get(), SerializedServerInfo.class);
-                newManagedServers.add(new ManagedServerInfo(entry.getKey(),
+                newManagedServers.add(new ManagedServerInfo(
+                        entry.getKey().substring(root.length() + 1),
                         serializedServerInfo.getAddress(),
                         serializedServerInfo.getMotd(),
                         serializedServerInfo.getRestricted()
                 ));
             }
 
+            this.plugin.getLogger().info(String.format("Got server info for %d servers", newManagedServers.size()));
             this.plugin.getProxy().getPluginManager().callEvent(new ServerListUpdatedEvent(newManagedServers));
         });
+        kvCache.start();
     }
 
     public void stopListening() throws Exception {
