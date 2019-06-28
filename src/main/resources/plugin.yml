@@ -1,0 +1,4 @@
+name: DynamicServerConfig
+main: lol.up.plugins.dynamicserverconfig.BungeePlugin
+version: 1.0
+author: SpencerSharkey
